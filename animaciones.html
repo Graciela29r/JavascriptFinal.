@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="estilos.css">
+  <title>Simulación de Galaxias - ROSERO</title>
+
+  <style>
+    :root {
+      font-family: Inter, system-ui, Segoe UI, Roboto, 'Helvetica Neue', Arial
+    }
+
+    body {
+      margin: 0;
+      background: #08020a;
+      color: #e6eef8;
+      display: flex;
+      flex-direction: column;
+      height: 100vh
+    }
+
+    header {
+      padding: 12px 16px;
+      background: linear-gradient(90deg, #0b1220, #091826);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .6);
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    header h1 {
+      font-size: 18px;
+      margin: 0
+    }
+
+    #wrap {
+      display: flex;
+      flex: 1;
+      overflow: hidden
+    }
+
+    #canvasWrap {
+      flex: 1;
+      display: flex;
+      align-items: stretch
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(ellipse at center, #050318 0%, #000 60%);
+    }
+
+    #panel {
+      width: 320px;
+      min-width: 240px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+      padding: 16px;
+      box-sizing: border-box;
+      border-left: 1px solid rgba(255, 255, 255, 0.03)
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin: 12px 0 6px
+    }
+
+    input[type=range] {
+      width: 100%
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      background: #1b6cff;
+      color: white;
+      cursor: pointer
+    }
+
+    .muted {
+      color: #9fb0c9;
+      font-size: 13px
+    }
+
+    footer {
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #9fb0c9;
+      background: transparent
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="menu">
+    <a href="pokeapi.html" class="item_menu">POKEAPI</a>
+    <a href="mariobross.html" class="item_menu">MARIO BROSS</a>
+    <a href="animaciones.html" class="item_menu">ANIMACIONES</a>
+  </div>
+
+  <header>
+    <h1>Simulación de Galaxias — <strong>ROSERO</strong></h1>
+    <div class="muted">Interactiva · Guarda como HTML y abre en tu navegador</div>
+  </header>
+
+  <div id="wrap">
+    <div id="canvasWrap">
+      <canvas id="c"></canvas>
+    </div>
+
+    <aside id="panel">
+      <label>Galaxias: <span id="gCountLabel">3</span></label>
+      <input id="gCount" type="range" min="1" max="6" value="3">
+
+      <label>Estrellas (total): <span id="countLabel">1200</span></label>
+      <input id="count" type="range" min="200" max="6000" value="1200">
+
+      <label>Brazos por galaxia: <span id="armsLabel">3</span></label>
+      <input id="arms" type="range" min="1" max="6" value="3">
+
+      <label>Spin (rotación): <span id="spinLabel">0.8</span></label>
+      <input id="spin" type="range" min="0" max="2" step="0.01" value="0.8">
+
+      <label>Aleatoriedad (dispersión): <span id="randLabel">0.45</span></label>
+      <input id="rand" type="range" min="0" max="1.5" step="0.01" value="0.45">
+
+      <label>Tamaño de estrellas: <span id="sizeLabel">1.2</span></label>
+      <input id="size" type="range" min="0.2" max="4" step="0.1" value="1.2">
+
+      <div style="margin-top:12px" class="row">
+        <button id="regen">Regenerar</button>
+        <button id="pause">Pausar</button>
+      </div>
+
+      <p class="muted" style="margin-top:14px">Consejos: presiona "Regenerar" después de cambiar parámetros. Usa el
+        ratón para arrastrar el campo gravitatorio (mantén clic izquierdo) y rueda para hacer zoom.</p>
+    </aside>
+  </div>
+
+  <footer>ROSERO · Simulación simple de galaxias (física aproximada)</footer>
+
+  <script>
+    // Canvas setup
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width = innerWidth - 320; // leave room for panel
+    let H = canvas.height = innerHeight - document.querySelector('header').offsetHeight - document.querySelector('footer').offsetHeight;
+
+    function resize() {
+      W = canvas.width = innerWidth - document.getElementById('panel').offsetWidth;
+      H = canvas.height = innerHeight - document.querySelector('header').offsetHeight - document.querySelector('footer').offsetHeight;
+      center = { x: W / 2, y: H / 2 };
+      draw();
+    }
+    addEventListener('resize', resize);
+
+    // UI elements
+    const gCountEl = document.getElementById('gCount');
+    const countEl = document.getElementById('count');
+    const armsEl = document.getElementById('arms');
+    const spinEl = document.getElementById('spin');
+    const randEl = document.getElementById('rand');
+    const sizeEl = document.getElementById('size');
+    const regenBtn = document.getElementById('regen');
+    const pauseBtn = document.getElementById('pause');
+
+    const gCountLabel = document.getElementById('gCountLabel');
+    const countLabel = document.getElementById('countLabel');
+    const armsLabel = document.getElementById('armsLabel');
+    const spinLabel = document.getElementById('spinLabel');
+    const randLabel = document.getElementById('randLabel');
+    const sizeLabel = document.getElementById('sizeLabel');
+
+    // state
+    let particles = [];
+    let center = { x: W / 2, y: H / 2 };
+    let running = true;
+    let viewOffset = { x: 0, y: 0, zoom: 1 };
+    let mouseDown = false;
+    let lastMouse = null;
+
+    // helpers
+    function randRange(a, b) { return a + Math.random() * (b - a) }
+
+    // create galaxies by generating spiral arms
+    function generate() {
+      particles = [];
+      const gCount = parseInt(gCountEl.value);
+      const total = parseInt(countEl.value);
+      const arms = parseInt(armsEl.value);
+      const spin = parseFloat(spinEl.value);
+      const randomness = parseFloat(randEl.value);
+
+      for (let g = 0; g < gCount; g++) {
+        const gx = randRange(0.2 * W, 0.8 * W);
+        const gy = randRange(0.2 * H, 0.8 * H);
+        const coreRadius = randRange(10, 50);
+        const colorHue = Math.floor(randRange(180, 360));
+        const starsPer = Math.floor(total / gCount);
+
+        for (let i = 0; i < starsPer; i++) {
+          // radial distance from core
+          const r = Math.pow(Math.random(), 1.2) * (Math.min(W, H) * 0.25);
+          // pick arm
+          const arm = i % arms;
+          // base angle along spiral
+          const angle = arm * (2 * Math.PI / arms) + r * 0.05 * spin + (Math.random() - 0.5) * randomness;
+          // add some perpendicular spread
+          const rx = r * Math.cos(angle);
+          const ry = r * Math.sin(angle);
+          const px = gx + rx + (Math.random() - 0.5) * r * 0.2 * randomness;
+          const py = gy + ry + (Math.random() - 0.5) * r * 0.2 * randomness;
+
+          // velocity: tangential to center of galaxy core to create rotation
+          const dx = -Math.sin(angle) * Math.sqrt(0.0005 * r + 0.2) * (1 + Math.random() * 0.4);
+          const dy = Math.cos(angle) * Math.sqrt(0.0005 * r + 0.2) * (1 + Math.random() * 0.4);
+
+          particles.push({ x: px, y: py, vx: dx, vy: dy, r: Math.max(0.2, (1 - r / (Math.min(W, H) * 0.25)) * parseFloat(sizeEl.value)), colorHue });
+        }
+      }
+
+      // some background stars
+      for (let i = 0; i < Math.floor(total * 0.02); i++) {
+        particles.push({ x: Math.random() * W, y: Math.random() * H, vx: 0, vy: 0, r: Math.random() * 1.2, colorHue: 220 });
+      }
+    }
+
+    // draw frame
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      // slight fade for trails
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(0, 0, W, H);
+
+      // draw particles
+      for (const p of particles) {
+        const x = (p.x + viewOffset.x - center.x) * viewOffset.zoom + center.x;
+        const y = (p.y + viewOffset.y - center.y) * viewOffset.zoom + center.y;
+        const rr = Math.max(0.2, p.r * viewOffset.zoom);
+        ctx.beginPath();
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, Math.max(2, rr * 4));
+        grad.addColorStop(0, `hsla(${p.colorHue}, 90%, 70%, 1)`);
+        grad.addColorStop(0.6, `hsla(${p.colorHue}, 80%, 55%, 0.6)`);
+        grad.addColorStop(1, `rgba(255,255,255,0)`);
+        ctx.fillStyle = grad;
+        ctx.arc(x, y, rr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // overlay info
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(8, 8, 220, 46);
+      ctx.fillStyle = '#cfe8ff';
+      ctx.font = '12px system-ui, Arial';
+      ctx.fillText(`Estrellas: ${particles.length}`, 16, 26);
+      ctx.fillText(`Zoom: ${viewOffset.zoom.toFixed(2)}`, 16, 44);
+    }
+
+    // physics step (very simplified)
+    function step(dt) {
+      // optional weak attraction towards local galaxy cores is implicit via initial velocities; add small central damping
+      for (const p of particles) {
+        // simple damping to keep things stable
+        p.vx *= 0.9995;
+        p.vy *= 0.9995;
+
+        p.x += p.vx * dt * 0.6;
+        p.y += p.vy * dt * 0.6;
+
+        // wrap-around edges to keep stars in view (gives infinite space feeling)
+        if (p.x < -W * 0.2) p.x += W * 1.4;
+        if (p.x > W * 1.2) p.x -= W * 1.4;
+        if (p.y < -H * 0.2) p.y += H * 1.4;
+        if (p.y > H * 1.2) p.y -= H * 1.4;
+      }
+    }
+
+    // animation loop
+    let last = performance.now();
+    function animate(t) {
+      const dt = Math.min(50, t - last);
+      last = t;
+      if (running) {
+        step(dt);
+      }
+      draw();
+      requestAnimationFrame(animate);
+    }
+
+    // UI wiring
+    function updateLabels() {
+      gCountLabel.textContent = gCountEl.value;
+      countLabel.textContent = countEl.value;
+      armsLabel.textContent = armsEl.value;
+      spinLabel.textContent = parseFloat(spinEl.value).toFixed(2);
+      randLabel.textContent = parseFloat(randEl.value).toFixed(2);
+      sizeLabel.textContent = parseFloat(sizeEl.value).toFixed(2);
+    }
+
+    [gCountEl, countEl, armsEl, spinEl, randEl, sizeEl].forEach(el => el.addEventListener('input', () => { updateLabels(); }));
+
+    regenBtn.addEventListener('click', () => { generate(); });
+    pauseBtn.addEventListener('click', () => { running = !running; pauseBtn.textContent = running ? 'Pausar' : 'Continuar'; });
+
+    // mouse interactions for panning & zooming
+    canvas.addEventListener('mousedown', (e) => { mouseDown = true; lastMouse = { x: e.clientX, y: e.clientY }; });
+    window.addEventListener('mouseup', () => { mouseDown = false; lastMouse = null; });
+    window.addEventListener('mousemove', (e) => {
+      if (mouseDown && lastMouse) {
+        const dx = (e.clientX - lastMouse.x) / viewOffset.zoom;
+        const dy = (e.clientY - lastMouse.y) / viewOffset.zoom;
+        viewOffset.x += dx;
+        viewOffset.y += dy;
+        lastMouse = { x: e.clientX, y: e.clientY };
+      }
+    });
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = -e.deltaY * 0.001;
+      const oldZoom = viewOffset.zoom;
+      viewOffset.zoom = Math.max(0.25, Math.min(6, viewOffset.zoom * (1 + delta)));
+      // adjust offset so zoom centers on mouse
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      viewOffset.x -= (mx - center.x) * (1 / oldZoom - 1 / viewOffset.zoom);
+      viewOffset.y -= (my - center.y) * (1 / oldZoom - 1 / viewOffset.zoom);
+    }, { passive: false });
+
+    // initial
+    updateLabels();
+    generate();
+    requestAnimationFrame(animate);
+    resize();
+  </script>
+</body>
+
+</html>
